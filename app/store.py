@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+from pathlib import Path
 from typing import Optional, Set, Tuple
 import config
 
@@ -33,6 +34,7 @@ def _build_registry(store: dict) -> Set[Tuple[str, Optional[int]]]:
         if isinstance(entry, dict):
             src = entry.get("source")
             if src:
+                src = Path(src).name
                 raw = entry.get("page")
                 try:
                     page = int(raw) if raw is not None else None
@@ -57,7 +59,7 @@ def is_valid_citation(source: str, page) -> bool:
         page = int(page) if page is not None else None
     except (ValueError, TypeError):
         page = None
-    return (source, page) in _registry
+    return (Path(source).name, page) in _registry
 
 
 def register_incognito(namespace: str, store_path: str) -> None:
