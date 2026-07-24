@@ -113,9 +113,9 @@ def _call_llm(prompt: str, model: str, max_tokens: int) -> str:
             max_tokens=max_tokens,
             temperature=0.0,
             messages=[{"role": "user", "content": prompt}],
+            stop=["<|im_end|>", "<|im_start|>"],
         ).choices[0].message.content or ""
-        # Remove <|im_end|> marker if present
-        result = result.replace("<|im_end|>", "").strip()
+        result = result.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
         print(f"[DEBUG] LLM response len={len(result)} | preview={repr(result[:200])}")
         return result
     except Exception as e:
