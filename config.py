@@ -26,7 +26,6 @@ NS_DEFAULT = "pdf-documents"
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 HF_BASE_URL = "https://router.huggingface.co/v1"
 HF_FIRST_MODEL=os.getenv("HF_FIRST_MODEL", "microsoft/Phi-3-mini-4k-instruct")
-CITATION_MODEL = os.getenv("CITATION_MODEL", "")
 HF_MAX_TOKENS = int(os.getenv("GEMINI_MAX_TOKENS", "1000"))
 HF_VERIFY_MAX_TOKENS = 128
 

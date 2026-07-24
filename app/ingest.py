@@ -7,7 +7,6 @@ from typing import Dict, List, Tuple
 
 import fitz
 import pymupdf4llm
-from langchain_experimental.text_splitter import SemanticChunker
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import config
@@ -160,35 +159,14 @@ class PineconeEmbedder:
         )
         return resp[0].values
 
-    # LangChain SemanticChunker compatibility shim
-    def embed_documents_lc(self, texts):
-        return self.embed_documents(texts)
-
-
-# ── SemanticChunker adapter ───────────────────────────────────────────
-
-class _LCEmbedAdapter:
-    """Minimal LangChain Embeddings adapter wrapping PineconeEmbedder."""
-    def __init__(self, embedder: PineconeEmbedder):
-        self._e = embedder
-
-    def embed_documents(self, texts):
-        return self._e.embed_documents(texts)
-
-    def embed_query(self, text):
-        return self._e.embed_query(text)
-
-
 # ── Core chunking ─────────────────────────────────────────────────────
 
-def _chunk_text(text: str, semantic_chunker: SemanticChunker, hard_capper: RecursiveCharacterTextSplitter) -> List[str]:
+def _chunk_text(text: str, splitter: RecursiveCharacterTextSplitter) -> List[str]:
     text = _strip_toc(text)
     text = _strip_references(text)
     text = _strip_academic_citations(text)
     text = _strip_author_bio(text)
-    docs = semantic_chunker.create_documents([text])
-    docs = hard_capper.split_documents(docs)
-    chunks = [_clean_chunk(d.page_content) for d in docs]
+    chunks = [_clean_chunk(c) for c in splitter.split_text(text)]
     chunks = [c for c in chunks if len(c.strip()) > config.MIN_CHUNK_LENGTH]
     chunks = [c for c in chunks if not _is_toc_like(c)]
     chunks = [c for c in chunks if not _is_citation_like(c)]
@@ -205,9 +183,7 @@ def ingest_pdf(
     text_store_path: 'data/chunk_text_store.json',
 ) -> Tuple[int, int]:
     """Extract, chunk, embed, upsert one PDF. Returns (total_chunks, new_chunks)."""
-    adapter = _LCEmbedAdapter(embedder)
-    semantic_chunker = SemanticChunker(adapter)
-    hard_capper = RecursiveCharacterTextSplitter(
+    splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE, chunk_overlap=config.CHUNK_OVERLAP
     )
 
@@ -228,7 +204,7 @@ def ingest_pdf(
     # Build chunk dicts
     all_chunks: List[Dict] = []
     for (_, page_num), text in zip(raw_pages, page_texts):
-        for c in _chunk_text(text, semantic_chunker, hard_capper):
+        for c in _chunk_text(text, splitter):
             all_chunks.append({"text": c, "source": file_path.name, "page": page_num})
 
     text_store = load_store(text_store_path)

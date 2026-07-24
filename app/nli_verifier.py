@@ -1,42 +1,41 @@
 from __future__ import annotations
-from functools import lru_cache
-from typing import List
 
 import config
 
+_SYSTEM = (
+    "You are an NLI classifier. Given a premise and a hypothesis, "
+    "respond with exactly one word: Entailment, Contradiction, or Neutral."
+)
 
-@lru_cache(maxsize=1)
-def _get_model():
-    from sentence_transformers import CrossEncoder
-    return CrossEncoder(config.CITATION_MODEL, max_length=512)
 
-
-def _label_order(model) -> List[str]:
-    cfg = getattr(getattr(model, "model", None), "config", None)
-    if cfg and getattr(cfg, "id2label", None):
-        return [cfg.id2label[i].title() for i in sorted(cfg.id2label)]
-    return ["Contradiction", "Entailment", "Neutral"]
+def _call_nli(premise: str, hypothesis: str) -> str:
+    from openai import OpenAI
+    client = OpenAI(base_url=config.HF_BASE_URL, api_key=config.HF_TOKEN)
+    try:
+        result = client.chat.completions.create(
+            model=config.HF_FIRST_MODEL,
+            max_tokens=5,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": f"Premise: {premise}\nHypothesis: {hypothesis}"},
+            ],
+        ).choices[0].message.content or ""
+        result = result.strip().split()[0].capitalize()
+        if result in ("Entailment", "Contradiction", "Neutral"):
+            return result
+    except Exception:
+        pass
+    return "Neutral"
 
 
 def entailment_score(premise: str, hypothesis: str) -> float:
-    """Return the Entailment probability (0-1). Returns 0.0 if either input is empty."""
     if not premise.strip() or not hypothesis.strip():
         return 0.0
-    model = _get_model()
-    scores = model.predict([(premise, hypothesis)], apply_softmax=True)
-    score_list = scores[0].tolist() if hasattr(scores[0], "tolist") else list(scores[0])
-    labels = _label_order(model)
-    idx = next((i for i, l in enumerate(labels) if l.lower() == "entailment"), None)
-    return float(score_list[idx]) if idx is not None else 0.0
+    return 1.0 if _call_nli(premise, hypothesis) == "Entailment" else 0.0
 
 
 def nli_label(premise: str, claim: str) -> str:
-    """Return the top NLI label for (premise, claim)."""
     if not premise.strip() or not claim.strip():
         return "Neutral"
-    model = _get_model()
-    scores = model.predict([(premise, claim)], apply_softmax=True)
-    score_list = scores[0].tolist() if hasattr(scores[0], "tolist") else list(scores[0])
-    labels = _label_order(model)
-    best = max(range(len(score_list)), key=score_list.__getitem__)
-    return labels[best]
+    return _call_nli(premise, claim)
