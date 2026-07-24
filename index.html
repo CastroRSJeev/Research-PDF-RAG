@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG | Secure Search</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg:           #0f172a;
+            --glass-bg:     rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text:         #f8fafc;
+            --muted:        #94a3b8;
+            --accent:       #3b82f6;
+            --accent-hover: #2563eb;
+            --user-bg:      rgba(59, 130, 246, 0.2);
+            --ai-bg:        rgba(30, 41, 59, 0.5);
+            --green:        #10b981;
+            --sidebar-bg:   rgba(15, 23, 42, 0.6);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(at 0% 0%,   rgba(59,130,246,.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139,92,246,.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Outer wrapper ──────────────────────────────────────── */
+        .wrapper {
+            width: 95%;
+            max-width: 1200px;
+            height: 88vh;
+            display: flex;
+            gap: 16px;
+            animation: fadeIn .5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Sidebar ────────────────────────────────────────────── */
+        .sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            background: var(--sidebar-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--glass-border);
+            font-size: .72rem;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .doc-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .doc-list::-webkit-scrollbar { width: 4px; }
+        .doc-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 10px; }
+
+        .doc-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: .78rem;
+            color: #cbd5e1;
+            line-height: 1.4;
+            background: rgba(255,255,255,.03);
+            border: 1px solid transparent;
+            transition: background .2s, border-color .2s;
+        }
+
+        .doc-item:hover {
+            background: rgba(59,130,246,.08);
+            border-color: rgba(59,130,246,.2);
+        }
+
+        .doc-icon { flex-shrink: 0; font-size: .9rem; margin-top: 1px; }
+
+        .doc-name { word-break: break-word; }
+
+        .doc-empty {
+            font-size: .78rem;
+            color: var(--muted);
+            padding: 12px 10px;
+            text-align: center;
+        }
+
+        /* ── Main chat container ────────────────────────────────── */
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,.5);
+            overflow: hidden;
+        }
+
+        /* ── Header ─────────────────────────────────────────────── */
+        .header {
+            padding: 20px 28px;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(15,23,42,.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .header-left { display: flex; flex-direction: column; gap: 3px; }
+
+        .header h1 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 9px; height: 9px;
+            background: var(--green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0   rgba(16,185,129,.7); }
+            70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0);  }
+            100% { box-shadow: 0 0 0 0   rgba(16,185,129,0);  }
+        }
+
+        .header-sub { font-size: .78rem; color: var(--muted); }
+
+        .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+        .upload-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,255,255,.07);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: .85rem;
+            cursor: pointer;
+            transition: background .2s, opacity .2s;
+        }
+        .upload-btn:hover { background: rgba(255,255,255,.13); }
+        .upload-btn.disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+
+        .incognito-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: .85rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* ── Chat area ──────────────────────────────────────────── */
+        .chat-box {
+            flex: 1;
+            padding: 28px 32px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-box::-webkit-scrollbar { width: 6px; }
+        .chat-box::-webkit-scrollbar-track { background: transparent; }
+        .chat-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 10px; }
+
+        .message {
+            max-width: 82%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: .93rem;
+            line-height: 1.65;
+            animation: slideUp .25s ease-out forwards;
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+        .user-message {
+            align-self: flex-end;
+            background: var(--user-bg);
+            border: 1px solid rgba(59,130,246,.3);
+            border-bottom-right-radius: 4px;
+        }
+
+        .ai-message {
+            align-self: flex-start;
+            background: var(--ai-bg);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .answer-header {
+            font-weight: 700;
+            font-size: .9rem;
+            color: #60a5fa;
+            text-transform: uppercase;
+            letter-spacing: .7px;
+            margin: 12px 0 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(96,165,250,.2);
+        }
+        .answer-header:first-child { margin-top: 0; }
+        .answer-body { color: var(--text); line-height: 1.7; }
+
+        .cite-tag {
+            display: inline-block;
+            background: rgba(59,130,246,.12);
+            border: 1px solid rgba(59,130,246,.3);
+            color: #93c5fd;
+            font-size: .7rem;
+            padding: 1px 8px;
+            border-radius: 20px;
+            margin-left: 4px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .typing-indicator {
+            display: none;
+            gap: 5px;
+            padding: 10px 14px;
+            align-self: flex-start;
+        }
+        .typing-indicator span {
+            width: 7px; height: 7px;
+            background: var(--muted);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40%            { transform: scale(1); }
+        }
+
+        /* ── Input bar ──────────────────────────────────────────── */
+        .input-area {
+            padding: 20px 28px;
+            background: rgba(15,23,42,.6);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .incognito-upload-btn {
+            display: none;
+            flex-shrink: 0;
+            background: rgba(255,255,255,.08);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        .incognito-upload-btn:hover { background: rgba(255,255,255,.14); }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(255,255,255,.05);
+            border: 1px solid var(--glass-border);
+            padding: 14px 20px;
+            border-radius: 12px;
+            color: #fff;
+            font-size: .95rem;
+            outline: none;
+            transition: border-color .25s, box-shadow .25s;
+        }
+        input[type="text"]:focus {
+            border-color: var(--accent);
+            background: rgba(255,255,255,.08);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+        }
+        input[type="text"]::placeholder { color: var(--muted); }
+
+        .send-btn {
+            flex-shrink: 0;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 0 28px;
+            height: 48px;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: .95rem;
+            cursor: pointer;
+            transition: background .2s, transform .15s, box-shadow .2s;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .send-btn:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 8px 20px -8px rgba(59,130,246,.5); }
+        .send-btn:active { transform: translateY(0); }
+        .send-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+        /* ── Toast ──────────────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(30,41,59,.95);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: .85rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s, transform .3s;
+            z-index: 999;
+            white-space: nowrap;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+    <!-- Sidebar: Uploaded Documents -->
+    <div class="sidebar">
+        <div class="sidebar-header">📂 Uploaded Documents</div>
+        <div class="doc-list" id="docList">
+            <div class="doc-empty">Loading…</div>
+        </div>
+    </div>
+
+    <!-- Main Chat -->
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1><div class="status-dot"></div> RAG System</h1>
+                <div class="header-sub">Hybrid Retrieval · Cited Answers</div>
+            </div>
+            <div class="header-right">
+                <label class="upload-btn disabled" id="normalUploadLabel" title="Ingest a PDF into the knowledge base">
+                    <input type="file" id="normalFile" style="display:none" accept=".pdf">
+                    📄 Ingest PDF
+                </label>
+                <label class="incognito-label">
+                    <input type="checkbox" id="incognitoToggle"> Incognito 🕵️
+                </label>
+            </div>
+        </div>
+
+        <div class="chat-box" id="chatBox">
+            <div class="message ai-message">
+                Welcome! I'm connected to your knowledge base. Ask me anything about your ingested documents.
+            </div>
+            <div class="typing-indicator" id="typingIndicator">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <label class="incognito-upload-btn" id="incognitoUploadBtn" title="Upload a temporary document">
+                <input type="file" id="incognitoFile" style="display:none" accept=".pdf">
+                📁
+            </label>
+            <input type="text" id="userInput" placeholder="Ask a question about your documents…" autocomplete="off">
+            <button class="send-btn" id="sendBtn">Send ➤</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    const chatBox            = document.getElementById('chatBox');
+    const userInput          = document.getElementById('userInput');
+    const sendBtn            = document.getElementById('sendBtn');
+    const typingIndicator    = document.getElementById('typingIndicator');
+    const incognitoToggle    = document.getElementById('incognitoToggle');
+    const incognitoFile      = document.getElementById('incognitoFile');
+    const incognitoUploadBtn = document.getElementById('incognitoUploadBtn');
+    const normalFile         = document.getElementById('normalFile');
+    const normalUploadLabel  = document.getElementById('normalUploadLabel');
+    const toast              = document.getElementById('toast');
+
+    let currentNamespace = null;
+
+    function showToast(msg, duration = 3000) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function renderAnswer(answer) {
+        function inlineSourceTags(text) {
+            return text.replace(/\[Source:\s*([^,\]]+),\s*Page:\s*(\d+)\]/g, (_, src, pg) =>
+                `<span class="cite-tag">📄 ${escapeHtml(src.trim())}, Page: ${pg}</span>`
+            ).replace(/\[Source:\s*([^\]]+)\]/g, (_, src) =>
+                `<span class="cite-tag">📄 ${escapeHtml(src.trim())}</span>`
+            );
+        }
+        const lines = answer.split('\n').map(l => l.trim()).filter(Boolean);
+        return lines.map(line => {
+            if (/^\*\*(.+?)\*\*$/.test(line))
+                return `<div class="answer-header">${line.replace(/\*\*(.*?)\*\*/g, '$1')}</div>`;
+            if (/^\*\*(.+?)\*\*\s+(.+)/.test(line))
+                return line.replace(/^\*\*(.+?)\*\*\s+(.*)/, (_, h, b) =>
+                    `<div class="answer-header">${h}</div><div class="answer-body">${inlineSourceTags(b.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'))}</div>`);
+            line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            return `<div class="answer-body">${inlineSourceTags(line)}</div>`;
+        }).join('');
+    }
+
+    function appendMessage(content, isUser) {
+        const div = document.createElement('div');
+        div.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+        div.innerHTML = isUser ? escapeHtml(content) : renderAnswer(content);
+        chatBox.insertBefore(div, typingIndicator);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function clearChatMessages() {
+        chatBox.querySelectorAll('.message:not(:first-child)').forEach(el => el.remove());
+    }
+
+    /* ── Load documents into sidebar ─────────────────────────────── */
+    async function loadDocuments() {
+        const list = document.getElementById('docList');
+        try {
+            const res = await fetch('/documents');
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            list.innerHTML = '';
+            if (!data.files.length) {
+                list.innerHTML = '<div class="doc-empty">No documents yet.</div>';
+                return;
+            }
+            data.files.forEach(name => {
+                const item = document.createElement('div');
+                item.className = 'doc-item';
+                item.innerHTML = `<span class="doc-icon">📄</span><span class="doc-name">${escapeHtml(name)}</span>`;
+                list.appendChild(item);
+            });
+        } catch (_) {
+            list.innerHTML = '<div class="doc-empty">Could not load.</div>';
+        }
+    }
+
+    loadDocuments();
+
+    /* ── Ingest button: enable only when incognito checked ────────── */
+    incognitoToggle.addEventListener('change', async (e) => {
+        normalUploadLabel.classList.toggle('disabled', !e.target.checked);
+        clearChatMessages();
+        if (e.target.checked) {
+            incognitoUploadBtn.style.display = 'flex';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+            userInput.placeholder = 'Upload a temporary PDF first…';
+            appendMessage('🕵️ Incognito Mode ON. Upload a PDF to chat with it in isolation — nothing is stored permanently.', false);
+        } else {
+            incognitoUploadBtn.style.display = 'none';
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.placeholder = 'Ask a question about your documents…';
+            if (currentNamespace) {
+                appendMessage('Closing incognito session and deleting temporary data…', false);
+                await closeIncognitoSession();
+                showToast('🗑️ Incognito data deleted.');
+            }
+            currentNamespace = null;
+            appendMessage('Incognito Mode OFF. Back to the main knowledge base.', false);
+        }
+    });
+
+    /* ── Normal PDF ingest ────────────────────────────────────────── */
+    normalFile.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        appendMessage(`Ingesting "${file.name}" into the knowledge base…`, false);
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const res = await fetch('/ingest', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            appendMessage(`✅ "${data.file}" ingested — ${data.new_chunks} new chunks (${data.total_chunks} total).`, false);
+            loadDocuments();
+        } catch (err) {
+            appendMessage(`⚠️ Ingest failed: ${err.message}`, false);
+        }
+        normalFile.value = '';
+    });
+
+    /* ── Incognito file upload ────────────────────────────────────── */
+    incognitoFile.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        appendMessage(`Uploading "${file.name}" to a temporary private namespace…`, false);
+        incognitoUploadBtn.style.opacity = '.5';
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+        userInput.placeholder = 'Uploading PDF, please wait…';
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const res = await fetch('/upload_incognito', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            currentNamespace = data.namespace;
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.placeholder = 'Ask about your private document…';
+            appendMessage(`✅ "${file.name}" ready — ${data.new_chunks} chunks indexed. You can now ask questions.`, false);
+        } catch (err) {
+            appendMessage(`⚠️ Upload failed: ${err.message}`, false);
+            userInput.placeholder = 'Upload a temporary PDF first…';
+        }
+        incognitoUploadBtn.style.opacity = '1';
+        incognitoFile.value = '';
+    });
+
+    /* ── Send message ─────────────────────────────────────────────── */
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+        userInput.value = '';
+        appendMessage(text, true);
+        typingIndicator.style.display = 'flex';
+        chatBox.scrollTop = chatBox.scrollHeight;
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+        try {
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: text, namespace: currentNamespace }),
+            });
+            if (!res.ok) throw new Error(`Server error ${res.status}`);
+            const data = await res.json();
+            appendMessage(data.answer, false);
+        } catch (err) {
+            appendMessage(`⚠️ Error: ${err.message}`, false);
+        } finally {
+            typingIndicator.style.display = 'none';
+            if (!incognitoToggle.checked || currentNamespace) {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+            }
+            userInput.focus();
+        }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(); });
+
+    async function closeIncognitoSession() {
+        if (!currentNamespace) return;
+        const ns = currentNamespace;
+        currentNamespace = null;
+        try {
+            await fetch('/close_incognito', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namespace: ns }),
+                keepalive: true,
+            });
+        } catch (_) {}
+    }
+
+    window.addEventListener('beforeunload', () => { closeIncognitoSession(); });
+</script>
+</body>
+</html>
