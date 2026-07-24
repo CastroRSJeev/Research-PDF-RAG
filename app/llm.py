@@ -90,10 +90,10 @@ def _norm_page(page) -> Optional[int]:
         return None
 
 
-def _build_source_tag(source: str, page) -> Optional[str]:
+def _build_source_tag(source: str, page, store_path: str | None = None) -> Optional[str]:
     """Return a [Source: ...] tag if the (source, page) pair is in the registry."""
     page = _norm_page(page)
-    if not is_valid_citation(source, page):
+    if not is_valid_citation(source, page, store_path):
         return None
     return f"[Source: {source}, Page: {page}]" if page is not None else f"[Source: {source}]"
 
@@ -131,6 +131,7 @@ def _render_sentence_level(
     raw_output: str,
     sentence_map: Dict[str, Dict],
     query: str,
+    store_path: str | None = None,
 ) -> Tuple[str, List[Dict]]:
     """Parse SID-cited output, run NLI, return (rendered_answer, claims_for_ui).
 
@@ -161,7 +162,7 @@ def _render_sentence_level(
             if key in seen:
                 continue
             seen.add(key)
-            tag = _build_source_tag(src, pg)
+            tag = _build_source_tag(src, pg, store_path)
             if tag:
                 tags.append(tag)
 
@@ -171,7 +172,7 @@ def _render_sentence_level(
         # One UI claim entry per unique source/page pair
         for src, pg in zip(item["sources"], item["pages"]):
             pg_norm = _norm_page(pg)
-            if is_valid_citation(src, pg_norm):
+            if is_valid_citation(src, pg_norm, store_path):
                 claims_for_ui.append({"text": claim, "source": src, "page": pg_norm})
 
     return "\n".join(rendered_lines).strip(), claims_for_ui
@@ -217,7 +218,7 @@ def _verify_claims_llm(claims: List[Dict], chunks_by_key: Dict[str, str]) -> Lis
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def generate_answer(query: str, chunks: List[Dict]) -> Tuple[str, List[Dict]]:
+def generate_answer(query: str, chunks: List[Dict], store_path: str | None = None) -> Tuple[str, List[Dict]]:
     """Sentence-level cited answer pipeline.
 
     1. Split chunks into sentences, assign SIDs.
@@ -246,7 +247,7 @@ def generate_answer(query: str, chunks: List[Dict]) -> Tuple[str, List[Dict]]:
         print(f"[DEBUG] LLM returned empty response - checking if model is accessible")
         return "The provided documents do not contain sufficient information to answer this question.", []
 
-    answer_text, claims = _render_sentence_level(raw, sentence_map, query)
+    answer_text, claims = _render_sentence_level(raw, sentence_map, query, store_path)
     print(f"[DEBUG] raw_len={len(raw)} | answer_text_len={len(answer_text)} | claims={len(claims)}")
 
     if not answer_text:
@@ -267,14 +268,14 @@ def generate_answer(query: str, chunks: List[Dict]) -> Tuple[str, List[Dict]]:
     return answer_text, claims
 
 
-def validate_claims(claims: List[Dict], query: str) -> List[Dict]:
+def validate_claims(claims: List[Dict], query: str, store_path: str | None = None) -> List[Dict]:
     """Hard-check every (source, page) against the registry. Log violations."""
     valid = []
     for claim in claims:
         src = claim.get("source", "")
         page = _norm_page(claim.get("page"))
         claim["page"] = page
-        if not is_valid_citation(src, page):
+        if not is_valid_citation(src, page, store_path):
             audit_log.log_guardrail(
                 query=query,
                 event_type="citation_registry_violation",

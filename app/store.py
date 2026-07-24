@@ -54,11 +54,14 @@ def refresh_registry() -> None:
     load_registry()
 
 
-def is_valid_citation(source: str, page) -> bool:
+def is_valid_citation(source: str, page, store_path: str | None = None) -> bool:
     try:
         page = int(page) if page is not None else None
     except (ValueError, TypeError):
         page = None
+    if store_path:
+        registry = _build_registry(load_store(store_path))
+        return (Path(source).name, page) in registry
     return (Path(source).name, page) in _registry
 
 

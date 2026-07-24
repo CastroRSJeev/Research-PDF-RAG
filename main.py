@@ -166,10 +166,10 @@ async def chat(req: ChatRequest):
         return ChatResponse(answer="No relevant documents found.", claims=[])
 
     # Generate
-    answer, claims = generate_answer(question, chunks)
+    answer, claims = generate_answer(question, chunks, store_path)
 
     # Source registry hard-check
-    claims = validate_claims(claims, question)
+    claims = validate_claims(claims, question, store_path)
 
     # PII redaction on output
     answer = redact_pii(answer)
