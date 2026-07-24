@@ -74,13 +74,12 @@ def retrieve(
     for rank, cid in enumerate(bm25_ids):
         rrf[cid] = rrf.get(cid, 0) + 1.0 / (60 + rank + 1)
 
-    ranked = sorted(rrf, key=lambda x: rrf[x], reverse=True)
+    ranked = sorted(rrf, key=lambda x: rrf[x], reverse=True)[:top_k]
     print(f"[DEBUG] vector_ids={len(vector_ids)} | bm25_ids={len(bm25_ids)} | ranked={len(ranked)}")
 
-    # For narrow queries, return only top 2 chunks (1 from Pinecone + 1 from BM25)
     if query_type == "narrow":
-        ranked = ranked[:2]
-        print(f"[DEBUG] Narrow query - limiting to top 2 chunks: {ranked}")
+        ranked = ranked[:1]
+        print(f"[DEBUG] Narrow query - limiting to top 1 chunk: {ranked}")
 
     results: List[Dict] = []
     for cid in ranked:
