@@ -30,7 +30,7 @@ HF_MAX_TOKENS = int(os.getenv("GEMINI_MAX_TOKENS", "1000"))
 HF_VERIFY_MAX_TOKENS = 128
 
 # ── Retrieval ─────────────────────────────────────────────────────────
-TOP_K = int(os.getenv("TOP_K", "5"))
+TOP_K = int(os.getenv("TOP_K", "1"))
 
 # ── Chunking ──────────────────────────────────────────────────────────
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
