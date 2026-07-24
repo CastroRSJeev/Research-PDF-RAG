@@ -176,22 +176,6 @@
 
         .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
-        .upload-btn {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            background: rgba(255,255,255,.07);
-            border: 1px solid var(--glass-border);
-            color: var(--text);
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-size: .85rem;
-            cursor: pointer;
-            transition: background .2s, opacity .2s;
-        }
-        .upload-btn:hover { background: rgba(255,255,255,.13); }
-        .upload-btn.disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
-
         .incognito-label {
             display: flex;
             align-items: center;
@@ -394,10 +378,6 @@
                 <div class="header-sub">Hybrid Retrieval · Cited Answers</div>
             </div>
             <div class="header-right">
-                <label class="upload-btn disabled" id="normalUploadLabel" title="Ingest a PDF into the knowledge base">
-                    <input type="file" id="normalFile" style="display:none" accept=".pdf">
-                    📄 Ingest PDF
-                </label>
                 <label class="incognito-label">
                     <input type="checkbox" id="incognitoToggle"> Incognito 🕵️
                 </label>
@@ -434,8 +414,6 @@
     const incognitoToggle    = document.getElementById('incognitoToggle');
     const incognitoFile      = document.getElementById('incognitoFile');
     const incognitoUploadBtn = document.getElementById('incognitoUploadBtn');
-    const normalFile         = document.getElementById('normalFile');
-    const normalUploadLabel  = document.getElementById('normalUploadLabel');
     const toast              = document.getElementById('toast');
 
     let currentNamespace = null;
@@ -507,9 +485,8 @@
 
     loadDocuments();
 
-    /* ── Ingest button: enable only when incognito checked ────────── */
+    /* ── Incognito toggle ─────────────────────────────────────────── */
     incognitoToggle.addEventListener('change', async (e) => {
-        normalUploadLabel.classList.toggle('disabled', !e.target.checked);
         clearChatMessages();
         if (e.target.checked) {
             incognitoUploadBtn.style.display = 'flex';
@@ -530,25 +507,6 @@
             currentNamespace = null;
             appendMessage('Incognito Mode OFF. Back to the main knowledge base.', false);
         }
-    });
-
-    /* ── Normal PDF ingest ────────────────────────────────────────── */
-    normalFile.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        appendMessage(`Ingesting "${file.name}" into the knowledge base…`, false);
-        const fd = new FormData();
-        fd.append('file', file);
-        try {
-            const res = await fetch('/ingest', { method: 'POST', body: fd });
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
-            appendMessage(`✅ "${data.file}" ingested — ${data.new_chunks} new chunks (${data.total_chunks} total).`, false);
-            loadDocuments();
-        } catch (err) {
-            appendMessage(`⚠️ Ingest failed: ${err.message}`, false);
-        }
-        normalFile.value = '';
     });
 
     /* ── Incognito file upload ────────────────────────────────────── */
